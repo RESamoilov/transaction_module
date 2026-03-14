@@ -1,0 +1,54 @@
+env: "prod"
+
+server:
+  address: ":8080"
+  read_timeout: "5s"
+  write_timeout: "10s"
+  idle_timeout: "60s"
+
+kafka:
+  consumer:
+    topic: "casino.transactions.v1"
+    group_id: "casino-tx-consumer-group"
+    workers_count: 64
+    
+    min_bytes: 10000
+    max_bytes: 10000000
+    max_wait: "1s"
+    read_backoff_min: "100ms"
+    read_backoff_max: "1s"
+    
+    batch_size: 100
+    batch_timeout: "50ms"
+    
+    retry_max_delay: "5s"
+    max_retries: 5
+    max_dlq_retries: 5
+
+  producer:
+    # Настройки продюсера для DLQ
+    dlq_topic: "casino.transactions.dlq.v1"
+    batch_timeout: "10ms"
+    batch_size: 100
+    max_attempts: 3
+    compression: "snappy"
+
+
+redis:
+  addr: "localhost:6379"
+  db: 0
+  pool_size: 100
+  min_idle_conns: 10
+  dial_timeout: "5s"
+  read_timeout: "3s"
+  write_timeout: "3s"
+  pool_timeout: "4s"
+
+db:
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime: "1h"
+  conn_max_idle_time: "30m"
+  max_conn_lifetime_jitter: "5m"
+
+

@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.env
+.env.*
+bin
+coverage.out
+cover_*
+*.log
+*.tmp
+Dockerfile*
+docker-compose*.yml
+README.md

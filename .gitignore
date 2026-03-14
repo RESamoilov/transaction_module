@@ -1,0 +1,36 @@
+# Secrets and local env files
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Go build artifacts
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Coverage artifacts
+coverage
+coverage.out
+cover_*
+
+# Logs and temp files
+*.log
+*.tmp
+tmp/
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Docker local overrides
+docker-compose.override.yml
+
