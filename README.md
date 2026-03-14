@@ -99,28 +99,30 @@ GET /api/v1/users/user-1/transactions?transaction_type=win&limit=10
 
 ```env
 CONFIG_PATH=config/config.yaml
-KAFKA_BROKERS=localhost:9092
-DB_DSN=postgres://casino:secretpassword@localhost:5432/casino_transactions?sslmode=disable&pool_max_conns=50
-HTTP_ADDRESS=:8081
+HTTP_ADDRESS=:8080
+POSTGRES_USER=casino
+POSTGRES_PASSWORD=secretpassword
+POSTGRES_DB=casino_transactions
 REDIS_PASSWORD=redis_pass
+DB_DSN=postgres://casino:secretpassword@postgres:5432/casino_transactions?sslmode=disable
+REDIS_ADDR=redis:6379
+KAFKA_BROKERS=kafka:9092
 ```
 
 ## Запуск
 
-1. Поднять PostgreSQL, Kafka и Redis.
-2. Применить миграции из директории `migrations/`.
-3. Запустить сервис:
+Для локальной разработки сервис запускается через Docker Compose. Это основной и поддерживаемый сценарий запуска.
 
-```bash
-go run ./cmd/server
-```
-
-## Docker
-
-Сервис можно поднять целиком через Docker Compose:
+Поднять весь стек:
 
 ```bash
 docker compose up --build
+```
+
+Запуск в фоне:
+
+```bash
+docker compose up -d --build
 ```
 
 Что поднимется:
@@ -134,16 +136,48 @@ docker compose up --build
 
 HTTP API после старта будет доступен на `http://localhost:8080`.
 
-Для контейнерного запуска используется отдельный конфиг:
-
-- `config/config.docker.yaml`
-
-Сборка контейнера вручную:
+Остановить стек:
 
 ```bash
-docker build -t casino-transaction-module .
-docker run --rm -p 8080:8080 casino-transaction-module
+docker compose down
 ```
+
+Остановить стек и удалить volumes:
+
+```bash
+docker compose down -v
+```
+
+## Нагрузочный тест
+
+Для быстрой локальной проверки потока сообщений можно использовать встроенный генератор событий:
+
+- `tools/loadtester`
+
+Запуск:
+
+```bash
+go run ./tools/loadtester/main
+```
+
+После старта loadtester поднимет HTTP-сервер на `http://localhost:8081`.
+
+Чтобы запустить отправку сообщений в Kafka, отправь `POST` запрос:
+
+```bash
+curl -X POST http://localhost:8081/load
+```
+
+Что делает loadtester:
+
+- в течение `5` секунд отправляет сообщения в Kafka topic `casino.transactions.v1`
+- генерирует валидные события с полями `id`, `user_id`, `transaction_type`, `amount`, `timestamp`
+- случайно распределяет тип транзакции между `bet` и `win`
+
+После этого можно проверить:
+
+- HTTP API на `http://localhost:8080/api/v1/transactions`
+- данные в PostgreSQL через `docker compose exec postgres psql -U casino -d casino_transactions`
 
 ## Тесты
 
@@ -167,19 +201,6 @@ go tool cover -func=coverage.out
 - если `DB_DSN` не задан, тест будет `skip`;
 - если PostgreSQL недоступен, тест будет `skip`;
 - тест создает временную схему и удаляет ее после завершения.
-
-## CI
-
-В проект добавлен GitHub Actions pipeline:
-
-- `.github/workflows/ci.yml`
-
-Pipeline делает следующее:
-
-- поднимает PostgreSQL service для integration-теста репозитория;
-- запускает `go test ./...`;
-- запускает `go build ./...`;
-- проверяет, что Docker-образ собирается.
 
 ## Файлы с тестами
 

@@ -21,7 +21,7 @@ func (uc *Transaction) ProcessBatch(ctx context.Context, txs []*domain.Transacti
 
 		mightExist, err := uc.redis.IsExists(ctx, idempotencyKey)
 		if err != nil {
-			slog.Warn("redis bloom filter check failed, falling back to pg", "err", err, "key", idempotencyKey)
+			slog.WarnContext(ctx, "redis bloom filter check failed, falling back to postgres", "err", err, "key", idempotencyKey)
 			mightExist = false
 		}
 
@@ -31,7 +31,7 @@ func (uc *Transaction) ProcessBatch(ctx context.Context, txs []*domain.Transacti
 				return fmt.Errorf("check fallback postgres: %w", err)
 			}
 			if isProcessed {
-				slog.Debug("duplicate skipped", "key", idempotencyKey)
+				slog.DebugContext(ctx, "duplicate transaction skipped", "key", idempotencyKey)
 				continue
 			}
 		}
@@ -48,10 +48,11 @@ func (uc *Transaction) ProcessBatch(ctx context.Context, txs []*domain.Transacti
 	if err != nil {
 		return fmt.Errorf("db save batch: %w", err)
 	}
+	slog.InfoContext(ctx, "transaction batch persisted", "received_count", len(txs), "saved_count", len(validTxs))
 
 	for _, key := range idmKeys {
 		if err := uc.redis.Add(ctx, key); err != nil {
-			slog.Warn("failed to add key to redis bloom", "err", err, "key", key)
+			slog.WarnContext(ctx, "failed to add key to redis bloom", "err", err, "key", key)
 		}
 	}
 

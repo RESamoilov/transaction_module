@@ -60,7 +60,7 @@ func (d *DLQHandler) HandleError(ctx context.Context, originalErr error, msgs ..
 		return fmt.Errorf("failed to write %d messages to DLQ %s: %w", len(msgs), d.dlqTopic, err)
 	}
 
-	slog.Info("successfully routed messages to DLQ",
+	slog.InfoContext(ctx, "successfully routed messages to DLQ",
 		"topic", d.dlqTopic,
 		"count", len(msgs),
 		"reason", errStr,

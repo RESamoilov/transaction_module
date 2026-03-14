@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -19,17 +20,17 @@ func NewTransactionRepository(pool *pgxpool.Pool) *TransactionRepository {
 }
 
 func (r *TransactionRepository) Save(ctx context.Context, txBatch []*domain.Transaction, idempotencyKeys []string) error {
-    if len(txBatch) == 0 {
-        return nil
-    }
+	if len(txBatch) == 0 {
+		return nil
+	}
 
-    tx, err := r.pool.Begin(ctx)
-    if err != nil {
-        return fmt.Errorf("begin tx: %w", err)
-    }
-    defer tx.Rollback(ctx)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
 
-    _, err = tx.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
         CREATE TEMP TABLE tmp_processed_messages (
             idempotency_key VARCHAR(255)
         ) ON COMMIT DROP;
@@ -42,44 +43,44 @@ func (r *TransactionRepository) Save(ctx context.Context, txBatch []*domain.Tran
             timestamp TIMESTAMP WITH TIME ZONE
         ) ON COMMIT DROP;
     `)
-    if err != nil {
-        return fmt.Errorf("create temp tables: %w", err)
-    }
+	if err != nil {
+		return fmt.Errorf("create temp tables: %w", err)
+	}
 
-    if len(idempotencyKeys) > 0 {
-        _, err = tx.CopyFrom(
-            ctx,
-            pgx.Identifier{"tmp_processed_messages"},
-            []string{"idempotency_key"},
-            pgx.CopyFromSlice(len(idempotencyKeys), func(i int) ([]interface{}, error) {
-                return []interface{}{idempotencyKeys[i]}, nil
-            }),
-        )
-        if err != nil {
-            return fmt.Errorf("copyfrom tmp_processed_messages: %w", err)
-        }
-    }
+	if len(idempotencyKeys) > 0 {
+		_, err = tx.CopyFrom(
+			ctx,
+			pgx.Identifier{"tmp_processed_messages"},
+			[]string{"idempotency_key"},
+			pgx.CopyFromSlice(len(idempotencyKeys), func(i int) ([]interface{}, error) {
+				return []interface{}{idempotencyKeys[i]}, nil
+			}),
+		)
+		if err != nil {
+			return fmt.Errorf("copyfrom tmp_processed_messages: %w", err)
+		}
+	}
 
-    _, err = tx.CopyFrom(
-        ctx,
-        pgx.Identifier{"tmp_transactions"},
-        []string{"id", "user_id", "amount", "type", "timestamp"},
-        pgx.CopyFromSlice(len(txBatch), func(i int) ([]interface{}, error) {
-            item := txBatch[i]
-            return []interface{}{
-                item.ID,
-                item.UserID,
-                item.Amount,
-                item.Type,
-                item.Timestamp,
-            }, nil
-        }),
-    )
-    if err != nil {
-        return fmt.Errorf("copyfrom tmp_transactions: %w", err)
-    }
+	_, err = tx.CopyFrom(
+		ctx,
+		pgx.Identifier{"tmp_transactions"},
+		[]string{"id", "user_id", "amount", "type", "timestamp"},
+		pgx.CopyFromSlice(len(txBatch), func(i int) ([]interface{}, error) {
+			item := txBatch[i]
+			return []interface{}{
+				item.ID,
+				item.UserID,
+				item.Amount,
+				item.Type,
+				item.Timestamp,
+			}, nil
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("copyfrom tmp_transactions: %w", err)
+	}
 
-    _, err = tx.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
         INSERT INTO processed_messages (idempotency_key)
         SELECT idempotency_key FROM tmp_processed_messages
         ON CONFLICT (idempotency_key) DO NOTHING;
@@ -88,18 +89,19 @@ func (r *TransactionRepository) Save(ctx context.Context, txBatch []*domain.Tran
         SELECT id, user_id, amount, type, timestamp FROM tmp_transactions
         ON CONFLICT (id) DO NOTHING;
     `)
-    if err != nil {
-        return fmt.Errorf("merge insert on conflict: %w", err)
-    }
+	if err != nil {
+		return fmt.Errorf("merge insert on conflict: %w", err)
+	}
 
-    // 6. Коммит транзакции (данные сохранены, tmp-таблицы испарились)
-    if err := tx.Commit(ctx); err != nil {
-        return fmt.Errorf("commit tx: %w", err)
-    }
+	// 6. Коммит транзакции (данные сохранены, tmp-таблицы испарились)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
 
-    return nil
+	slog.InfoContext(ctx, "postgres batch committed", "transactions_count", len(txBatch), "idempotency_keys_count", len(idempotencyKeys))
+
+	return nil
 }
-
 
 func (r *TransactionRepository) GetByUserID(ctx context.Context, filter domain.TransactionFilter, page domain.PageTransaction) ([]*domain.Transaction, error) {
 	query := `SELECT id, user_id, amount, type, timestamp FROM transactions`

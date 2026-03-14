@@ -50,7 +50,7 @@ func (p *Producer) WriteBatch(ctx context.Context, msgs []kafka.Message) error {
 		return fmt.Errorf("failed to write messages to kafka: %w", err)
 	}
 
-	slog.Debug("Batch produced to Kafka",
+	slog.DebugContext(ctx, "batch produced to kafka",
 		"count", len(msgs),
 		"duration_ms", time.Since(start).Milliseconds(),
 	)

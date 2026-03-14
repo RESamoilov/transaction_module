@@ -1,6 +1,7 @@
 package httpdelivery
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -18,12 +19,15 @@ func NewTransactionHandler(uc *transaction.Transaction) *TransactionHandler {
 }
 
 func (th *TransactionHandler) GetUserTransactions(c echo.Context) error {
+	ctx := c.Request().Context()
 	var req dto.GetUserTransactionsRequest
 	if err := c.Bind(&req); err != nil {
+		slog.WarnContext(ctx, "failed to bind get user transactions request", "err", err)
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	if err := c.Validate(req); err != nil {
+		slog.WarnContext(ctx, "failed to validate get user transactions request", "err", err, "user_id", req.UserID)
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
@@ -33,6 +37,7 @@ func (th *TransactionHandler) GetUserTransactions(c echo.Context) error {
 
 	cursorPayload, err := dto.DecodeCursor(req.Cursor)
 	if err != nil {
+		slog.WarnContext(ctx, "invalid user transactions cursor", "user_id", req.UserID)
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
 	}
 
@@ -43,8 +48,9 @@ func (th *TransactionHandler) GetUserTransactions(c echo.Context) error {
 
 	page := dto.BuildPageRequest(req.Limit, cursorPayload)
 
-	txs, err := th.usecase.GetTxByUserID(c.Request().Context(), filter, page)
+	txs, err := th.usecase.GetTxByUserID(ctx, filter, page)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to fetch user transactions", "err", err, "user_id", req.UserID, "transaction_type", req.Type)
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
@@ -53,13 +59,16 @@ func (th *TransactionHandler) GetUserTransactions(c echo.Context) error {
 }
 
 func (h *TransactionHandler) GetAllTransactions(c echo.Context) error {
+	ctx := c.Request().Context()
 	var req dto.GetAllTransactionsRequest
 
 	if err := c.Bind(&req); err != nil {
+		slog.WarnContext(ctx, "failed to bind get all transactions request", "err", err)
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	if err := c.Validate(&req); err != nil {
+		slog.WarnContext(ctx, "failed to validate get all transactions request", "err", err, "transaction_type", req.Type)
 		return err
 	}
 
@@ -69,6 +78,7 @@ func (h *TransactionHandler) GetAllTransactions(c echo.Context) error {
 
 	cursorPayload, err := dto.DecodeCursor(req.Cursor)
 	if err != nil {
+		slog.WarnContext(ctx, "invalid all transactions cursor")
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
 	}
 
@@ -80,8 +90,9 @@ func (h *TransactionHandler) GetAllTransactions(c echo.Context) error {
 	page := dto.BuildPageRequest(req.Limit, cursorPayload)
 
 	// Вызов другого метода UseCase
-	txs, err := h.usecase.GetAll(c.Request().Context(), filter, page)
+	txs, err := h.usecase.GetAll(ctx, filter, page)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to fetch all transactions", "err", err, "transaction_type", req.Type)
 		return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
 	}
 
