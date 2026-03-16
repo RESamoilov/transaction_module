@@ -19,6 +19,7 @@ dist/
 coverage
 coverage.out
 cover_*
+*.out
 
 # Logs and temp files
 *.log
