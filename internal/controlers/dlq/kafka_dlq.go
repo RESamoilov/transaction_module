@@ -25,7 +25,7 @@ func NewDLQHandler(cfg config.ProducerConfig) *DLQHandler {
 	}
 }
 
-// HandleError обрабатывает одно или несколько битых сообщений, обогащает их и отправляет в DLQ
+// HandleError enriches failed messages and republishes them to the DLQ topic.
 func (d *DLQHandler) HandleError(ctx context.Context, originalErr error, msgs ...kafka.Message) error {
 	if len(msgs) == 0 {
 		return nil
@@ -54,7 +54,6 @@ func (d *DLQHandler) HandleError(ctx context.Context, originalErr error, msgs ..
 		})
 	}
 
-	// Отправляем все сообщения одним батчем в Kafka
 	err := d.producer.WriteBatch(ctx, dlqMsgs)
 	if err != nil {
 		return fmt.Errorf("failed to write %d messages to DLQ %s: %w", len(msgs), d.dlqTopic, err)

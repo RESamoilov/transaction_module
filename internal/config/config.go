@@ -11,7 +11,7 @@ import (
 	"github.com/meindokuse/transaction-module/pkg/connect/redis"
 )
 
-// Config - корневая структура настроек
+// Config is the root application configuration.
 type Config struct {
 	Env    string          `yaml:"env"`
 	Server HTTPServer      `yaml:"server"`
@@ -20,7 +20,7 @@ type Config struct {
 	Redis  redis.Config    `yaml:"redis"`
 }
 
-// HTTPServer - настройки REST API
+// HTTPServer contains HTTP server settings.
 type HTTPServer struct {
 	Address      string        `yaml:"address" env:"HTTP_ADDRESS" env-default:":8080"`
 	ReadTimeout  time.Duration `yaml:"read_timeout" env-default:"5s"`
@@ -28,7 +28,7 @@ type HTTPServer struct {
 	IdleTimeout  time.Duration `yaml:"idle_timeout" env-default:"60s"`
 }
 
-// KafkaConfig содержит настройки и консьюмера, и DLQ-продюсера
+// KafkaConfig groups consumer and DLQ producer settings.
 type KafkaConfig struct {
 	Consumer ConsumerConfig `yaml:"consumer"`
 	Producer ProducerConfig `yaml:"producer"`
@@ -48,7 +48,7 @@ type ConsumerConfig struct {
 	MaxRetries     int           `yaml:"max_retries" env-default:"3"`
 	BatchSize      int           `yaml:"batch_size" env-default:"100"`
 	BatchTimeout   time.Duration `yaml:"batch_timeout" env-default:"50ms"`
-	MaxDlqRetries int			 `yaml:"max_dlq_retries" env-default:"3"`
+	MaxDlqRetries  int           `yaml:"max_dlq_retries" env-default:"3"`
 }
 
 type ProducerConfig struct {
@@ -60,33 +60,31 @@ type ProducerConfig struct {
 	Compression  string        `yaml:"compression" env-default:"snappy"`
 }
 
-
 func Load() *Config {
-    _ = godotenv.Load()
+	_ = godotenv.Load()
 
-    var cfg Config
+	var cfg Config
 
-    configPath := os.Getenv("CONFIG_PATH")
-    if configPath == "" {
-        configPath = "config/config.yaml" 
-    }
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config/config.yaml"
+	}
 
-    if _, err := os.Stat(configPath); err == nil {
-        if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
-            help, _ := cleanenv.GetDescription(&cfg, nil)
-            slog.Error("cannot read config file", "err", err, "help", help)
-            os.Exit(1)
-        }
-        slog.Info("config loaded from file and env", "path", configPath)
-    } else {
-        // prod
-        if err := cleanenv.ReadEnv(&cfg); err != nil {
-            help, _ := cleanenv.GetDescription(&cfg, nil)
-            slog.Error("cannot read env variables", "err", err, "help", help)
-            os.Exit(1)
-        }
-        slog.Info("config loaded from env variables only")
-    }
+	if _, err := os.Stat(configPath); err == nil {
+		if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
+			help, _ := cleanenv.GetDescription(&cfg, nil)
+			slog.Error("cannot read config file", "err", err, "help", help)
+			os.Exit(1)
+		}
+		slog.Info("config loaded from file and env", "path", configPath)
+	} else {
+		if err := cleanenv.ReadEnv(&cfg); err != nil {
+			help, _ := cleanenv.GetDescription(&cfg, nil)
+			slog.Error("cannot read env variables", "err", err, "help", help)
+			os.Exit(1)
+		}
+		slog.Info("config loaded from env variables only")
+	}
 
-    return &cfg
+	return &cfg
 }

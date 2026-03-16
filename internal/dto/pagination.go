@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// DecodeCursor распаковывает Base64 строку -> JSON -> структуру CursorPayload
+// DecodeCursor restores cursor state from a base64-encoded JSON payload.
 func DecodeCursor(encoded string) (*CursorPayload, error) {
 	if encoded == "" {
 		return nil, nil
@@ -25,7 +25,7 @@ func DecodeCursor(encoded string) (*CursorPayload, error) {
 	return &payload, nil
 }
 
-// EncodeCursor запаковывает структуру CursorPayload -> JSON -> Base64 строку
+// EncodeCursor serializes cursor state into a base64-encoded JSON payload.
 func EncodeCursor(payload CursorPayload) (string, error) {
 	jsonBytes, err := json.Marshal(payload)
 	if err != nil {

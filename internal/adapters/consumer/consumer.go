@@ -17,13 +17,18 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-// BatchHandler интерфейс для сохранения пачки транзакций в БД
+// BatchHandler persists a validated transaction batch.
 type BatchHandler func(ctx context.Context, txs []*domain.Transaction) error
 
-// ErrorHandler абстрагирует логику работы с мертвыми письмами (DLQ).
-// Принимает оригинальную ошибку и одно ИЛИ несколько сообщений.
+// ErrorHandler routes failed messages to an external dead-letter handler.
 type ErrorHandler interface {
 	HandleError(ctx context.Context, originalErr error, msgs ...kafka.Message) error
+}
+
+type kafkaReader interface {
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
 }
 
 type WorkerTask struct {
@@ -32,7 +37,7 @@ type WorkerTask struct {
 }
 
 type Consumer struct {
-	reader       *kafka.Reader
+	reader       kafkaReader
 	handler      BatchHandler
 	errorHandler ErrorHandler
 	cfg          config.ConsumerConfig
@@ -62,7 +67,6 @@ func NewConsumer(cfg config.ConsumerConfig, handler BatchHandler, errHandler Err
 	})
 
 	workers := make([]chan WorkerTask, cfg.WorkersCount)
-
 	for i := 0; i < cfg.WorkersCount; i++ {
 		workers[i] = make(chan WorkerTask, cfg.BatchSize*2)
 	}
@@ -77,6 +81,7 @@ func NewConsumer(cfg config.ConsumerConfig, handler BatchHandler, errHandler Err
 	}
 }
 
+// Start fan-outs Kafka messages to per-user workers and keeps order inside each worker shard.
 func (c *Consumer) Start(ctx context.Context) {
 	slog.InfoContext(ctx, "starting batch consumer", "topic", c.cfg.Topic, "workers", c.cfg.WorkersCount)
 
@@ -135,7 +140,6 @@ func (c *Consumer) Start(ctx context.Context) {
 		}
 
 		workerID := hashUserID(tx.UserID) % uint32(c.cfg.WorkersCount)
-
 		c.workers[workerID] <- WorkerTask{
 			Msg: msg,
 			Tx:  tx,
@@ -152,6 +156,7 @@ func (c *Consumer) handlePoisonPill(msg kafka.Message, tracker *PartitionWaterma
 	}
 }
 
+// batchWorkerLoop accumulates messages into batches and flushes them on size or timeout.
 func (c *Consumer) batchWorkerLoop(ctx context.Context, workerID int, tasks <-chan WorkerTask) {
 	defer c.wg.Done()
 
@@ -194,6 +199,7 @@ func (c *Consumer) batchWorkerLoop(ctx context.Context, workerID int, tasks <-ch
 	}
 }
 
+// processAndCommitBatch retries storage, falls back to DLQ, and commits offsets only on success.
 func (c *Consumer) processAndCommitBatch(ctx context.Context, batchTx []*domain.Transaction, batchMsg []kafka.Message, workerID int) bool {
 	attempts := 0
 	delay := 100 * time.Millisecond
@@ -282,7 +288,6 @@ func (c *Consumer) sendToDlq(ctx context.Context, originalErr error, msgs ...kaf
 		case <-ctx.Done():
 			return fmt.Errorf("DLQ retry aborted due to context cancellation: %w", ctx.Err())
 		case <-time.After(2 * time.Second):
-
 		}
 	}
 

@@ -157,7 +157,7 @@ docker compose down -v
 Запуск:
 
 ```bash
-go run ./tools/loadtester/main
+go run ./tools/loadtester/main.go
 ```
 
 После старта loadtester поднимет HTTP-сервер на `http://localhost:8081`.

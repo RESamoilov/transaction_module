@@ -19,14 +19,14 @@ func NewProducer(cfg config.ProducerConfig) *Producer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(cfg.Brokers...),
 		Topic:        cfg.DLQTopic,
-		Balancer:     &kafka.Murmur2Balancer{}, // Классический алгоритм хэширования партиций
+		Balancer:     &kafka.Murmur2Balancer{},
 		MaxAttempts:  cfg.MaxAttempts,
 		BatchSize:    cfg.BatchSize,
 		BatchTimeout: cfg.BatchTimeout,
-		RequiredAcks: kafka.RequireAll, // Гарантия записи на все реплики брокера (-1)
+		RequiredAcks: kafka.RequireAll,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		Async:        false, // Мы хотим знать, точно ли записался батч
+		Async:        false,
 	}
 
 	if cfg.Compression == "snappy" {
@@ -36,7 +36,7 @@ func NewProducer(cfg config.ProducerConfig) *Producer {
 	return &Producer{writer: w}
 }
 
-// WriteBatch отправляет пачку сообщений в Kafka
+// WriteBatch publishes a batch of messages to the configured Kafka topic.
 func (p *Producer) WriteBatch(ctx context.Context, msgs []kafka.Message) error {
 	if len(msgs) == 0 {
 		return nil
@@ -45,7 +45,6 @@ func (p *Producer) WriteBatch(ctx context.Context, msgs []kafka.Message) error {
 	start := time.Now()
 
 	err := p.writer.WriteMessages(ctx, msgs...)
-
 	if err != nil {
 		return fmt.Errorf("failed to write messages to kafka: %w", err)
 	}

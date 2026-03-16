@@ -1,0 +1,11 @@
+mode: set
+github.com/meindokuse/transaction-module/internal/config/config.go:63.21,69.22 4 1
+github.com/meindokuse/transaction-module/internal/config/config.go:69.22,71.3 1 0
+github.com/meindokuse/transaction-module/internal/config/config.go:73.2,73.47 1 1
+github.com/meindokuse/transaction-module/internal/config/config.go:73.47,74.63 1 1
+github.com/meindokuse/transaction-module/internal/config/config.go:74.63,78.4 3 0
+github.com/meindokuse/transaction-module/internal/config/config.go:79.3,79.67 1 1
+github.com/meindokuse/transaction-module/internal/config/config.go:80.8,81.48 1 1
+github.com/meindokuse/transaction-module/internal/config/config.go:81.48,85.4 3 0
+github.com/meindokuse/transaction-module/internal/config/config.go:86.3,86.53 1 1
+github.com/meindokuse/transaction-module/internal/config/config.go:89.2,89.13 1 1

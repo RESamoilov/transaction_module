@@ -7,14 +7,14 @@ import (
 )
 
 type TransactionItem struct {
-	ID        string  `json:"id"`
-	UserID    string  `json:"user_id"`
-	Amount    float64 `json:"amount"`
-	Type      domain.TransactionType  `json:"transaction_type"`
-	Timestamp string  `json:"timestamp"`
+	ID        string                 `json:"id"`
+	UserID    string                 `json:"user_id"`
+	Amount    float64                `json:"amount"`
+	Type      domain.TransactionType `json:"transaction_type"`
+	Timestamp string                 `json:"timestamp"`
 }
 
-// ResponseMeta метаданные ответа (информация о пагинации)
+// ResponseMeta carries pagination state for list responses.
 type ResponseMeta struct {
 	HasMore    bool   `json:"has_more"`
 	NextCursor string `json:"next_cursor,omitempty"`

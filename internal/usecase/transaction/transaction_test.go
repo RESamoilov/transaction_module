@@ -177,3 +177,130 @@ func TestGetAllPassesFilterAndPage(t *testing.T) {
 		t.Fatalf("GetAll() page = %+v, want %+v", db.getAllPage, page)
 	}
 }
+
+func TestProcessBatchEmptyBatchReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	db := &mockDB{isMessageProcessedResult: map[string]bool{}}
+	redis := &mockRedis{existsResults: map[string]bool{}, existsErrors: map[string]error{}}
+
+	uc := NewTransaction(db, redis)
+	if err := uc.ProcessBatch(context.Background(), nil); err != nil {
+		t.Fatalf("ProcessBatch() error = %v", err)
+	}
+	if db.saveCalled {
+		t.Fatal("Save() was called for empty batch")
+	}
+}
+
+func TestProcessBatchReturnsFallbackError(t *testing.T) {
+	t.Parallel()
+
+	tx := &domain.Transaction{ID: "dup", UserID: "user-1", Amount: 10, Type: domain.TxTypeBet, Timestamp: time.Now().UTC()}
+	db := &mockDB{
+		isMessageProcessedResult: map[string]bool{},
+		isMessageProcessedErr:    errors.New("postgres down"),
+	}
+	redis := &mockRedis{
+		existsResults: map[string]bool{"tx_idem_dup": true},
+		existsErrors:  map[string]error{},
+	}
+
+	uc := NewTransaction(db, redis)
+	err := uc.ProcessBatch(context.Background(), []*domain.Transaction{tx})
+	if err == nil {
+		t.Fatal("ProcessBatch() error = nil, want fallback error")
+	}
+}
+
+func TestProcessBatchReturnsSaveError(t *testing.T) {
+	t.Parallel()
+
+	tx := &domain.Transaction{ID: "tx-1", UserID: "user-1", Amount: 10, Type: domain.TxTypeBet, Timestamp: time.Now().UTC()}
+	db := &mockDB{
+		saveErr:                  errors.New("save failed"),
+		isMessageProcessedResult: map[string]bool{},
+	}
+	redis := &mockRedis{
+		existsResults: map[string]bool{"tx_idem_tx-1": false},
+		existsErrors:  map[string]error{},
+	}
+
+	uc := NewTransaction(db, redis)
+	err := uc.ProcessBatch(context.Background(), []*domain.Transaction{tx})
+	if err == nil {
+		t.Fatal("ProcessBatch() error = nil, want save error")
+	}
+}
+
+func TestProcessBatchAllDuplicatesSkipsSave(t *testing.T) {
+	t.Parallel()
+
+	tx := &domain.Transaction{ID: "dup", UserID: "user-1", Amount: 10, Type: domain.TxTypeBet, Timestamp: time.Now().UTC()}
+	db := &mockDB{
+		isMessageProcessedResult: map[string]bool{"tx_idem_dup": true},
+	}
+	redis := &mockRedis{
+		existsResults: map[string]bool{"tx_idem_dup": true},
+		existsErrors:  map[string]error{},
+	}
+
+	uc := NewTransaction(db, redis)
+	if err := uc.ProcessBatch(context.Background(), []*domain.Transaction{tx}); err != nil {
+		t.Fatalf("ProcessBatch() error = %v", err)
+	}
+	if db.saveCalled {
+		t.Fatal("Save() was called for duplicate-only batch")
+	}
+}
+
+func TestGetTxByUserIDPassesFilterAndPage(t *testing.T) {
+	t.Parallel()
+
+	want := []*domain.Transaction{
+		{ID: "tx-1", UserID: "user-1", Amount: 10, Type: domain.TxTypeBet, Timestamp: time.Now().UTC()},
+	}
+	db := &mockDB{
+		getByUserIDResult:        want,
+		isMessageProcessedResult: map[string]bool{},
+	}
+
+	uc := NewTransaction(db, &mockRedis{
+		existsResults: map[string]bool{},
+		existsErrors:  map[string]error{},
+	})
+
+	filter := domain.TransactionFilter{UserID: "user-1", Type: "bet"}
+	page := domain.PageTransaction{Limit: 10}
+	got, err := uc.GetTxByUserID(context.Background(), filter, page)
+	if err != nil {
+		t.Fatalf("GetTxByUserID() error = %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "tx-1" {
+		t.Fatalf("GetTxByUserID() = %+v, want tx-1", got)
+	}
+	if db.getByUserIDFilter != filter {
+		t.Fatalf("filter = %+v, want %+v", db.getByUserIDFilter, filter)
+	}
+	if db.getByUserIDPage != page {
+		t.Fatalf("page = %+v, want %+v", db.getByUserIDPage, page)
+	}
+}
+
+func TestGetAllReturnsError(t *testing.T) {
+	t.Parallel()
+
+	db := &mockDB{
+		getAllErr:                errors.New("db failed"),
+		isMessageProcessedResult: map[string]bool{},
+	}
+	uc := NewTransaction(db, &mockRedis{
+		existsResults: map[string]bool{},
+		existsErrors:  map[string]error{},
+	})
+
+	_, err := uc.GetAll(context.Background(), domain.TransactionFilter{}, domain.PageTransaction{Limit: 5})
+	if err == nil {
+		t.Fatal("GetAll() error = nil, want propagated error")
+	}
+}

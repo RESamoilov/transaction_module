@@ -45,7 +45,6 @@ func (th *TransactionHandler) GetUserTransactions(c echo.Context) error {
 		UserID: req.UserID,
 		Type:   req.Type,
 	}
-
 	page := dto.BuildPageRequest(req.Limit, cursorPayload)
 
 	txs, err := th.usecase.GetTxByUserID(ctx, filter, page)
@@ -55,7 +54,6 @@ func (th *TransactionHandler) GetUserTransactions(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, dto.BuildResponse(txs, req.Limit))
-
 }
 
 func (h *TransactionHandler) GetAllTransactions(c echo.Context) error {
@@ -82,14 +80,11 @@ func (h *TransactionHandler) GetAllTransactions(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
 	}
 
-	// Здесь filter.UserID остается пустым
 	filter := domain.TransactionFilter{
 		Type: req.Type,
 	}
-
 	page := dto.BuildPageRequest(req.Limit, cursorPayload)
 
-	// Вызов другого метода UseCase
 	txs, err := h.usecase.GetAll(ctx, filter, page)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to fetch all transactions", "err", err, "transaction_type", req.Type)

@@ -16,6 +16,11 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+type messageWriter interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
 type TransactionEvent struct {
 	ID        string  `json:"id"`
 	UserID    string  `json:"user_id"`
@@ -30,7 +35,6 @@ const (
 )
 
 func main() {
-	// Настраиваем Kafka Writer
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(kafkaBroker),
 		Topic:        topic,
@@ -41,21 +45,32 @@ func main() {
 	}
 	defer writer.Close()
 
-	http.HandleFunc("/load", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/load", newLoadHandler(writer, 5*time.Second, 20))
+
+	log.Println("Load Tester is running on http://localhost:8081")
+	log.Println("Send a POST request to http://localhost:8081/load to start the load test.")
+
+	if err := http.ListenAndServe(":8081", nil); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// newLoadHandler runs a short burst of valid transaction events against Kafka.
+func newLoadHandler(writer messageWriter, duration time.Duration, workers int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		log.Println("Starting load test for 5 seconds...")
+		log.Printf("Starting load test for %s...", duration)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), duration)
 		defer cancel()
 
 		var totalSent int64
 		var wg sync.WaitGroup
 
-		workers := 20
 		for i := 0; i < workers; i++ {
 			wg.Add(1)
 			go func(workerID int) {
@@ -74,7 +89,6 @@ func main() {
 					}
 
 					amount := math.Round((rand.Float64()*999.99+0.01)*100) / 100
-
 					event := TransactionEvent{
 						ID:        uuid.New().String(),
 						UserID:    fmt.Sprintf("user-%d", rand.Intn(1000)),
@@ -84,8 +98,6 @@ func main() {
 					}
 
 					payload, _ := json.Marshal(event)
-
-					// Отправляем в Kafka (с ключом по UserID для сохранения порядка, если нужно)
 					err := writer.WriteMessages(context.Background(), kafka.Message{
 						Key:   []byte(event.UserID),
 						Value: payload,
@@ -102,16 +114,9 @@ func main() {
 
 		wg.Wait()
 
-		msg := fmt.Sprintf("Load test completed! Successfully sent %d transactions to Kafka in 5 seconds.\n", totalSent)
+		msg := fmt.Sprintf("Load test completed! Successfully sent %d transactions to Kafka in %s.\n", totalSent, duration)
 		log.Print(msg)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(msg))
-	})
-
-	log.Println("Load Tester is running on http://localhost:8081")
-	log.Println("Send a POST request to http://localhost:8081/load to trigger the DDOS.")
-
-	if err := http.ListenAndServe(":8081", nil); err != nil {
-		log.Fatal(err)
+		_, _ = w.Write([]byte(msg))
 	}
 }

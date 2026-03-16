@@ -13,11 +13,20 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+var (
+	waitForShutdownSignal = func(quit <-chan os.Signal) {
+		<-quit
+	}
+	shutdownEchoServer = func(e *echo.Echo, ctx context.Context) error {
+		return e.Shutdown(ctx)
+	}
+)
+
 func GracefulShutdown(e *echo.Echo, timeout time.Duration, cancel context.CancelFunc, closers ...interface{}) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	<-quit
+	waitForShutdownSignal(quit)
 	slog.Info("Interrupt signal received, starting graceful shutdown...")
 
 	if cancel != nil {
@@ -27,10 +36,16 @@ func GracefulShutdown(e *echo.Echo, timeout time.Duration, cancel context.Cancel
 	ctx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
 	defer shutdownCancel()
 
-	if err := e.Shutdown(ctx); err != nil {
+	if err := shutdownEchoServer(e, ctx); err != nil {
 		slog.Error("Echo server forced to shutdown", "err", err)
 	}
 
+	shutdownResources(ctx, closers...)
+
+	slog.Info("Server exited gracefully")
+}
+
+func shutdownResources(ctx context.Context, closers ...interface{}) {
 	for _, item := range closers {
 		if item == nil {
 			continue
@@ -51,6 +66,4 @@ func GracefulShutdown(e *echo.Echo, timeout time.Duration, cancel context.Cancel
 			slog.Warn("Unknown closer type, skipping", "type", fmt.Sprintf("%T", c))
 		}
 	}
-
-	slog.Info("Server exited gracefully")
 }

@@ -16,12 +16,6 @@ import (
 	"github.com/meindokuse/transaction-module/internal/domain"
 )
 
-func getProjectRoot() string {
-    _, b, _, _ := runtime.Caller(0)
-    
-    return filepath.Join(filepath.Dir(b), "../../..")
-}
-
 func TestTransactionRepositoryIntegration(t *testing.T) {
 	_ = godotenv.Load(filepath.Join("..", "..", "..", ".env"))
 

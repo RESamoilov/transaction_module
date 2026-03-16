@@ -19,6 +19,18 @@ import (
 	"github.com/meindokuse/transaction-module/pkg/validate"
 )
 
+var (
+	newPgPool             = pkgPostgres.NewPgPool
+	newRedisClient        = pkgRedis.NewRedisClient
+	newTransactionRepo    = postgres.NewTransactionRepository
+	newBloomFilterRepo    = adapterRedis.NewBloomFilterRepository
+	newTransactionUseCase = transaction.NewTransaction
+	newTransactionHandler = httpdelivery.NewTransactionHandler
+	newDLQHandler         = dlq.NewDLQHandler
+	newConsumer           = consumer.NewConsumer
+	newValidator          = validate.Get
+)
+
 type App struct {
 	Echo   *echo.Echo
 	Config *config.Config
@@ -37,14 +49,14 @@ func BuildApp(ctx context.Context, cfg *config.Config) (*App, error) {
 
 	slog.InfoContext(ctx, "initializing infrastructure")
 
-	pgWrapper, err := pkgPostgres.NewPgPool(ctx, cfg.DB)
+	pgWrapper, err := newPgPool(ctx, cfg.DB)
 	if err != nil {
 		return nil, err
 	}
 	app.PgPool = pgWrapper
 	slog.InfoContext(ctx, "postgres connection initialized")
 
-	redisWrapper, err := pkgRedis.NewRedisClient(ctx, cfg.Redis)
+	redisWrapper, err := newRedisClient(ctx, cfg.Redis)
 	if err != nil {
 		return nil, err
 	}
@@ -53,23 +65,23 @@ func BuildApp(ctx context.Context, cfg *config.Config) (*App, error) {
 
 	slog.InfoContext(ctx, "wiring dependencies")
 
-	dbRepo := postgres.NewTransactionRepository(pgWrapper.Pool)
-	redisRepo := adapterRedis.NewBloomFilterRepository(redisWrapper.Client)
-	txUseCase := transaction.NewTransaction(dbRepo, redisRepo)
-	txHandler := httpdelivery.NewTransactionHandler(txUseCase)
+	dbRepo := newTransactionRepo(pgWrapper.Pool)
+	redisRepo := newBloomFilterRepo(redisWrapper.Client)
+	txUseCase := newTransactionUseCase(dbRepo, redisRepo)
+	txHandler := newTransactionHandler(txUseCase)
 
 	app.setupRouter(txHandler)
 
 	slog.InfoContext(ctx, "initializing message broker")
 
-	dlqHandler := dlq.NewDLQHandler(cfg.Kafka.Producer)
+	dlqHandler := newDLQHandler(cfg.Kafka.Producer)
 	app.DLQ = dlqHandler
 
-	txConsumer := consumer.NewConsumer(
+	txConsumer := newConsumer(
 		cfg.Kafka.Consumer,
 		txUseCase.ProcessBatch,
 		dlqHandler,
-		validate.Get(),
+		newValidator(),
 	)
 	app.Consumer = txConsumer
 
@@ -83,7 +95,7 @@ func (a *App) setupRouter(txHandler *httpdelivery.TransactionHandler) {
 	a.Echo.Use(middleware.RequestLogger())
 	a.Echo.Use(middleware.CORS())
 
-	a.Echo.Validator = httpdelivery.NewEchoValidator(validate.Get())
+	a.Echo.Validator = httpdelivery.NewEchoValidator(newValidator())
 
 	api := a.Echo.Group("/api/v1")
 	api.GET("/transactions", txHandler.GetAllTransactions)

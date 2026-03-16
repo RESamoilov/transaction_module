@@ -7,15 +7,20 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/meindokuse/transaction-module/internal/domain"
 )
 
-type TransactionRepository struct {
-	pool *pgxpool.Pool
+type queryPool interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
 }
 
-func NewTransactionRepository(pool *pgxpool.Pool) *TransactionRepository {
+type TransactionRepository struct {
+	pool queryPool
+}
+
+func NewTransactionRepository(pool queryPool) *TransactionRepository {
 	return &TransactionRepository{pool: pool}
 }
 
@@ -93,7 +98,6 @@ func (r *TransactionRepository) Save(ctx context.Context, txBatch []*domain.Tran
 		return fmt.Errorf("merge insert on conflict: %w", err)
 	}
 
-	// 6. Коммит транзакции (данные сохранены, tmp-таблицы испарились)
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}
